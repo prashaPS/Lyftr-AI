@@ -1,21 +1,20 @@
 import hashlib
 import json
 import time
-import asyncio
 from typing import Dict, List, Optional
 
 import litellm
 from litellm.caching.caching import Cache
 from fastapi import HTTPException
 
-# Enable LiteLLM built-in in-memory cache
-litellm.cache = Cache(type="disk", disk_cache_dir="/tmp/litellm_cache")
-litellm.set_verbose = False
-
 # Suppress noisy LiteLLM logs
 import logging
 logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 logging.getLogger("LiteLLM Router").setLevel(logging.WARNING)
+
+# Enable LiteLLM built-in in-memory cache (type="local" = in-memory, works without Redis/disk)
+litellm.cache = Cache(type="local")
+litellm.set_verbose = False
 
 
 class LLMManager:
@@ -27,7 +26,7 @@ class LLMManager:
         """
         self.keys = keys
         self.cache_enabled = True
-        # In-memory response cache as reliable fallback / primary
+        # Reliable in-memory cache dict (SHA-256 of model+messages → result)
         self._mem_cache: Dict[str, Dict] = {}
 
     def _make_cache_key(self, messages: List[Dict]) -> str:
@@ -43,7 +42,7 @@ class LLMManager:
     ) -> Dict:
         simulated_failures = simulated_failures or {}
 
-        # ── 1. Check in-memory cache ──────────────────────────────────────────
+        # ── 1. Check in-memory cache ─────────────────────────────────────────
         cache_key = self._make_cache_key(messages)
         if self.cache_enabled and cache_key in self._mem_cache:
             cached = self._mem_cache[cache_key]
@@ -87,7 +86,7 @@ class LLMManager:
                 )
                 latency_ms = int((time.perf_counter() - start) * 1000)
 
-                # Detect LiteLLM cache hit via hidden params
+                # Detect LiteLLM cache hit
                 hidden = getattr(response, "_hidden_params", {}) or {}
                 is_cache_hit = bool(hidden.get("cache_hit", False))
 
@@ -108,8 +107,8 @@ class LLMManager:
                     "fallback_attempts": 0 if is_cache_hit else fallback_attempts,
                 }
 
-                # Store in in-memory cache
-                if self.cache_enabled:
+                # Also store in our own in-memory cache for guaranteed hits
+                if self.cache_enabled and not is_cache_hit:
                     self._mem_cache[cache_key] = {
                         "reply": reply,
                         "model": model_used,
@@ -123,7 +122,8 @@ class LLMManager:
                 err = str(exc)
                 # Treat rate-limit / server errors as retriable
                 retriable = any(
-                    code in err for code in ["429", "500", "502", "503", "quota", "rate_limit", "RateLimitError"]
+                    code in err
+                    for code in ["429", "500", "502", "503", "quota", "rate_limit", "RateLimitError"]
                 )
                 if retriable:
                     fallback_attempts += 1
