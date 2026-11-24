@@ -8,8 +8,8 @@ LLM Chatbot with **key failover**, **response caching**, and **multi-turn conver
 
 | Service  | URL |
 |----------|-----|
-| Frontend | `https://lyftr-frontend.vercel.app` *(update after deploy)* |
-| Backend  | `https://lyftr-backend.onrender.com` *(update after deploy)* |
+| Frontend | `https://lyftr-ai-six.vercel.app` |
+| Backend  | `https://lyftr-ai-l0o9.onrender.com` |
 
 ---
 
