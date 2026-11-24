@@ -18,7 +18,7 @@ litellm.set_verbose = False
 
 
 class LLMManager:
-    MODEL = "gemini/gemini-2.0-flash"
+    MODEL = "gemini/gemini-2.5-flash"
 
     def __init__(self, keys: List[Dict]):
         """
